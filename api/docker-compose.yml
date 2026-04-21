@@ -1,0 +1,20 @@
+services:
+  recommender:
+    build: .
+    container_name: arxiv-recommender
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the local data directory containing arxiv_embeddings.pkl
+      - ./data:/app/data:ro
+    environment:
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - DATA_PATH=data/arxiv_embeddings.pkl
+      - TOP_K_MAX=20
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
