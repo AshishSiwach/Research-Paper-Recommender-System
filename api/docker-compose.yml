@@ -6,7 +6,7 @@ services:
       - "8000:8000"
     volumes:
       # Mount the local data directory containing arxiv_embeddings.pkl
-      - ./data:/app/data:ro
+      - ../data:/app/data:ro
     environment:
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
       - DATA_PATH=data/arxiv_embeddings.pkl

@@ -20,7 +20,7 @@ import os
 from sentence_transformers import SentenceTransformer
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-CSV_PATH    = os.getenv("CSV_PATH",    "data/arXiv_scientific_dataset.csv")
+CSV_PATH    = os.getenv("CSV_PATH",    "data/arXiv_scientific dataset.csv")
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "data/arxiv_embeddings.pkl")
 MODEL_NAME  = os.getenv("MODEL_NAME",  "all-MiniLM-L6-v2")
 BATCH_SIZE  = int(os.getenv("BATCH_SIZE", "512"))
@@ -35,11 +35,7 @@ def prepare():
     df = pd.read_csv(CSV_PATH)
     print(f"  {len(df):,} rows  |  columns: {list(df.columns)}")
 
-    # Drop rows with missing title or summary
-    df = df.dropna(subset=["title", "summary"]).reset_index(drop=True)
-    print(f"  {len(df):,} rows after dropping nulls")
-
-    # ── Build text field — matches original notebook exactly ──────────────────
+    # ── Build text field ──────────────────
     df["text"] = (
         df["title"].fillna("") + " " +
         df["category"].fillna("") + " " +
@@ -49,7 +45,7 @@ def prepare():
     # ── Encode ─────────────────────────────────────────────────────────────────
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"\nEncoding {len(df):,} papers with '{MODEL_NAME}' on {device}")
-    print("  ~2 min on GPU (T4), ~12 min on CPU")
+    
 
     model = SentenceTransformer(MODEL_NAME)
     model.to(device)
@@ -76,7 +72,7 @@ def prepare():
         pickle.dump({"papers": papers, "embeddings": embeddings}, f)
 
     size_mb = os.path.getsize(OUTPUT_FILE) / 1024 / 1024
-    print(f"Done — {size_mb:.1f} MB  |  Ready to run: docker compose up --build")
+    print(f"Done — {size_mb:.1f} MB")
 
 
 if __name__ == "__main__":
