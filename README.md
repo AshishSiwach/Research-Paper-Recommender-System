@@ -1,63 +1,238 @@
-# Research-Paper-Recommender-System
-Repository of codes and dataset of an AI powered research paper recommender system
-<img width="2752" height="1536" alt="unnamed (1)" src="https://github.com/user-attachments/assets/ae0cab56-bb85-4ec9-b0a2-845873a6e278" />
+# ArXiv Research Paper Retrieval System
 
+**Embedding-based semantic retrieval over 136,238 ArXiv papers — dense vector search, KeyBERT keyword extraction, REST API, and Docker deployment**
 
-# 🎯 The Research Challenge
-The project tackles the significant question: “How can an automated recommendation system, enhanced with tag extraction, improve the discovery and comprehension of relevant research papers?”.
-We aim to make recommendations more efficient and provide users with easier access to descriptive tags (keywords) to quickly decide which paper to read.
+[![Python](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
+[![Sentence-Transformers](https://img.shields.io/badge/Sentence--Transformers-all--MiniLM--L6--v2-orange)](https://www.sbert.net/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Deployment-Docker-2496ED)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
 
---------------------------------------------------------------------------------
-## ✨ Key Features
-• Semantic Retrieval: Recommends research papers based on deep semantic similarity using dense vector representations.
+---
 
-• Context-Aware Keywords: Extracts contextually relevant descriptive tags (keywords) for each recommended paper using KeyBERT, moving beyond simple high-frequency terms.
+## Overview
 
-• GPU Acceleration: Utilizes GPU acceleration with Sentence Transformers, enabling the efficient processing of large datasets (136,238 examples) and eliminating CPU bottlenecks associated with older methods like TF-IDF.
+Given a query — a title, topic, or description — this system retrieves the most semantically similar research papers from a 136k-paper ArXiv corpus using dense vector embeddings and cosine similarity. Each result includes a similarity score and KeyBERT-extracted keywords for quick relevance judgement.
 
-• Robust Data Foundation: Built upon the multidisciplinary ArXiv Scientific Research Papers Dataset.
+The system is exposed as a **REST API** (FastAPI) and **containerised with Docker** for reproducible local deployment.
 
---------------------------------------------------------------------------------
-# 🛠️ Methodology: Two-Part System
-The project is logically divided into two primary parts: creating the research paper recommender system and extracting keywords for the resulting recommendations.
-## Part 1: Semantic Recommender via Sentence Transformers
-This system follows an unsupervised modeling approach.
-1. Text Corpus Generation: The text corpus for each paper is created by combining the text fields: Title + Category + Summary.
-2. Embedding Generation: A pre-trained Sentence Transformer model, specifically all-MiniLM-L6-v2 (selected for its speed—5 times faster than all-mpnet-base-v2—while maintaining good quality), is employed. This model embeds each paper's combined text into a dense vector representation, capturing rich semantic and contextual information.
-3. Similarity Computation: When a user query is provided, it is embedded into the same vector space. Cosine similarity is then computed between the query vector and all document embeddings.
-4. Recommendation: The top n documents with the highest similarity scores are recommended.
-## Part 2: Keyword Extraction via KeyBERT
-KeyBERT is integrated to provide interpretable highlights for the recommended papers.
+---
 
-• KeyBERT leverages BERT embeddings to extract keywords, focusing on the deeper semantic meaning inherent in the text.
+## Results
 
-• This approach ensures keywords are context-aware and truly represent the document’s core content.
+Evaluated using **title-only self-retrieval**: query with a paper's title only, check if the correct paper appears in top-K results among all 136,238 candidates. This tests the model's ability to bridge a short title query to its richer indexed representation (title + category + summary).
 
-• In the experiments, the top 5 keywords were extracted for each research paper.
+| Metric | Value |
+|---|---|
+| **Recall@5** | **0.96** |
+| **Recall@1** | **0.88** |
+| **MRR** | **0.92** |
+| Avg query latency | 37ms |
 
+Evaluated on a 100-query random sample. Recall@5 = 0.96 means the correct paper appears in the top 5 results 96% of the time across 136,238 candidates.
 
---------------------------------------------------------------------------------
-# 📊 Evaluation and Performance
-The model validation phase implemented an enhanced validation methodology.
+---
 
-• Relevance Proxy: Relevance was established by counting a recommendation as relevant if it shared the same primary category as the query paper.
+## Architecture
 
-• Metric: The primary metric used was the Mean Average Precision at 5 (MAP@5), computed as the arithmetic mean of all individual precision scores.
+```
+Query (title / topic / description)
+        │
+        ▼
+┌─────────────────────────────────┐
+│  Sentence-Transformer Encoder   │
+│  all-MiniLM-L6-v2               │
+│  384-dim L2-normalised vector   │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  Cosine Similarity Search       │
+│  over 136,238 paper embeddings  │
+│  (torch.cos_sim, CPU ~37ms)     │
+└──────────────┬──────────────────┘
+               │
+               ▼
+┌─────────────────────────────────┐
+│  Top-K Results                  │
+│  + KeyBERT keyword extraction   │
+│  + similarity scores            │
+└─────────────────────────────────┘
+```
 
-The system demonstrated overall efficiency and relevance:
-Metric Result
-Value
+**Text field:** `title + category + summary` — the same field used at indexing and query time.
 
-**Mean Average Precision @ 5 (MAP@5)
+---
 
-0.8400**
+## Quick Start
 
---------------------------------------------------------------------------------
-# 📦 Data Source
-The project utilizes the ArXiv Scientific Research Papers Dataset from Kaggle.
+### Option A — Docker (recommended)
 
-• Size: Approximately 136,000 arXiv research papers.
+**1. Build the embeddings (run once, ~12 min on CPU / ~2 min on GPU):**
 
-• Fields Covered: Artificial Intelligence, Machine Learning, Mathematics, Astrophysics, and more.
+```bash
+pip install pandas sentence-transformers torch numpy
+python prepare_api_data.py
+```
 
-• Key Features Used: Id, Title, Category, Summary (combined to form the text corpus)
+**2. Start the API:**
+
+```bash
+cd api
+docker compose up --build
+```
+
+API starts at **http://localhost:8000**
+
+**3. Query it:**
+
+```bash
+curl -X POST http://localhost:8000/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"query": "transformer models for information retrieval", "top_k": 5}'
+```
+
+Or open **http://localhost:8000/docs** for the interactive Swagger UI.
+
+---
+
+### Option B — Local (no Docker)
+
+```bash
+pip install -r api/requirements.txt
+python prepare_api_data.py
+uvicorn api.app:app --reload
+```
+
+---
+
+## API Reference
+
+### `POST /recommend`
+
+Request:
+```json
+{
+  "query": "neural networks for document ranking",
+  "top_k": 5
+}
+```
+
+Response:
+```json
+{
+  "query": "neural networks for document ranking",
+  "keywords": ["document ranking", "neural networks"],
+  "results": [
+    {
+      "rank": 1,
+      "paper_id": "abs-2206.10128v3",
+      "title": "Bridging the Gap Between Indexing and Retrieval...",
+      "abstract": "...",
+      "category": "Information Retrieval",
+      "first_author": "Shengyao Zhuang",
+      "score": 0.647,
+      "keywords": ["indexing", "retrieval", "index"]
+    }
+  ],
+  "latency_ms": 37.6
+}
+```
+
+### `GET /health`
+
+Returns model status, device, and number of papers loaded.
+
+---
+
+## Evaluation
+
+Run the full evaluation suite (title-only retrieval + category-based + self-retrieval sanity check):
+
+```bash
+python evaluate.py --num-queries 100 --k 5
+```
+
+Three evaluation passes:
+
+| Evaluation | Method | What it measures |
+|---|---|---|
+| Eval 1 | Category-based Precision@5 | Fraction of results sharing query paper's category |
+| Eval 2 | Full-text self-retrieval | Sanity check — paper finds itself using own text |
+| Eval 3 | **Title-only self-retrieval** | Primary metric — short title query finds correct paper |
+
+---
+
+## Project Structure
+
+```
+Research-Paper-Recommender-System/
+├── api/
+│   ├── app.py                  # FastAPI application
+│   ├── Dockerfile              # Multi-stage Docker build (CPU-only torch)
+│   ├── docker-compose.yml      # Local deployment
+│   ├── requirements.txt        # API dependencies
+│   └── README.md               # API-specific documentation
+├── data/                       # Gitignored
+│   ├── arXiv_scientific_dataset.csv
+│   └── arxiv_embeddings.pkl    # Generated by prepare_api_data.py
+├── notebooks/
+│   └── RecSyS_Code.ipynb       # Original exploration notebook
+├── evaluate.py                 # Evaluation suite (3 methods)
+├── prepare_api_data.py         # Builds arxiv_embeddings.pkl from CSV
+├── requirements.txt            # Notebook/local dependencies
+├── .gitignore
+└── README.md
+```
+
+---
+
+## Technical Details
+
+### Embedding Model
+
+`all-MiniLM-L6-v2` was selected for its speed/quality tradeoff — 5× faster than `all-mpnet-base-v2` while maintaining strong semantic similarity performance. Embeddings are **L2-normalised** so cosine similarity equals dot product at inference time.
+
+### Text Field
+
+```python
+df["text"] = df["title"] + " " + df["category"] + " " + df["summary"]
+```
+
+Combining title, category, and summary gives the model sufficient context to distinguish between papers on similar topics within the same broad category.
+
+### Similarity
+
+Uses `sentence_transformers.util.pytorch_cos_sim` for efficient batched cosine similarity — same implementation at both indexing and query time.
+
+### KeyBERT
+
+BERT-based keyword extraction on each retrieved paper's abstract. Returns the top-3 most representative keyphrases per result using cosine similarity between candidate n-gram embeddings and the document embedding.
+
+---
+
+## Data
+
+**ArXiv Scientific Research Papers Dataset** (Kaggle)
+
+- **136,238 papers** across AI, ML, Mathematics, Astrophysics, and more
+- Fields used: `id`, `title`, `category`, `category_code`, `summary`, `first_author`
+- No null values across any field
+
+The CSV is not included in the repo due to size. Download from [Kaggle](https://www.kaggle.com/) and place in `data/`.
+
+---
+
+## Author
+
+**Ashish Siwach** — MSc Business Analytics (Distinction), University of Exeter
+
+- Portfolio: [ashishsiwach.com](https://portfolio-five-silk-56.vercel.app/)
+- GitHub: [@AshishSiwach](https://github.com/AshishSiwach)
+- LinkedIn: [ashish-siwach](https://www.linkedin.com/in/ashish-siwach)
+
+---
+
+## License
+
+MIT — see LICENSE for details
